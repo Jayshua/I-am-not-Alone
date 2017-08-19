@@ -1,79 +1,8 @@
-class Point {
-   constructor(x, y) {
-      this.x = x;
-      this.y = y;
-   }
 
-   add(other) {
-      return new Point(this.x + other.x, this.y + other.y)
-   }
-
-   sub(other) {
-      return new Point(this.x - other.x, this.y - other.y);
-   }
-
-   div(other) {
-      return new Point(this.x / other.x, this.y / other.y);
-   }
-
-   mul(other) {
-      return new Point(this.x * other.x, this.y * other.y);
-   }
-
-   magnitude() {
-      return Math.sqrt(this.x * this.x + this.y * this.y);
-   }
-
-   normalize() {
-      return this.div_scalar(this.magnitude());
-   }
-
-   div_scalar(scalar) {
-      return new Point(this.x / scalar, this.y / scalar);
-   }
-
-   mul_scalar(scalar) {
-      return new Point(this.x * scalar, this.y * scalar);
-   }
-}
-
-Point.UP = new Point(0, -1);
-Point.DOWN = new Point(0, 1);
-Point.LEFT = new Point(-1, 0);
-Point.RIGHT = new Point(1, 0);
-
-
-class Rect {
-   constructor(location, width, height) {
-      this.topLeft = location;
-      this.bottomRight = new Point(location.x + width, location.y + height);
-      this.widthHeight = new Point(width, height);
-      this.width = width;
-      this.height = height;
-   }
-
-   intersects(obj) {
-      if (obj.constructor === Point) {
-         return obj.x > this.topLeft.x
-            && obj.x < this.bottomRight.x
-            && obj.y > this.topLeft.y
-            && obj.y < this.bottomRight.y;
-      } else if (obj.constructor === Rect) {
-         return this.intersects(obj.topLeft) || this.intersects(obj.bottomRight);
-      } else {
-         console.error("Tried to find the intersection of an object that wasn't a point or rect", obj);
-      }
-   }
-
-   randomPointIn() {
-      let size = this.bottomRight.sub(this.topLeft);
-      size.x *= Math.random();
-      size.y *= Math.random();
-      return size.add(this.topLeft);
-   }
-}
-
-
+let config = {
+   background: "#111",
+   walls: "#444"
+};
 
 
 
@@ -93,7 +22,7 @@ class Bullet {
    }
 
    draw(ctx) {
-      ctx.fillStyle = "green";
+      ctx.fillStyle = "white";
       ctx.fillRect(this.location.x, this.location.y, 0.5, 0.5);
    }
 }
@@ -320,7 +249,7 @@ class Maze {
       return this.cellAtLocation(location) == 2;
    }
 
-   draw(ctx, game) {
+   drawWalls(ctx, game) {
       let cellWidth = game.arena.width / this.width;
       let cellHeight = game.arena.height / this.height;
       let quad = (x, y) => {
@@ -339,19 +268,51 @@ class Maze {
          let y = Math.floor(index / this.height) * cellHeight;
          quad(x, y);
       });
-      ctx.fillStyle = "purple";
+      ctx.fillStyle = config.walls;
       ctx.fill();
+   }
 
+   drawPath(ctxx, game) {
+      let cellWidth = game.arena.width / this.width;
+      let cellHeight = game.arena.height / this.height;
       // Draw path
       ctx.beginPath();
-      this.grid.forEach((cell, index) => {
-         if (cell !== 1) return;
-         let x = (index % this.height) * cellWidth;
-         let y = Math.floor(index / this.height) * cellHeight;
-         quad(x, y);
-      });
-      ctx.fillStyle = "yellow";
-      ctx.fill();
+      let equal = (a, b) => a.x == b.x && a.y == b.y;
+      let current = {x: 0, y: 1};
+      let last = {x: 0, y: 0};
+
+      while (current.x != 50 && current.y != 50) {
+         let above = {x: current.x, y: current.y - 1};
+         let below = {x: current.x, y: current.y + 1};
+         let left  = {x: current.x - 1, y: current.y};
+         let right = {x: current.x + 1, y: current.y};
+
+         let next;
+         if (!equal(above, last) && this.cellAtGrid(above.x, above.y) === 1)      next = above;
+         else if (!equal(below, last) && this.cellAtGrid(below.x, below.y) === 1) next = below;
+         else if (!equal(left, last) && this.cellAtGrid(left.x, left.y) === 1)    next = left;
+         else if (!equal(right, last) && this.cellAtGrid(right.x, right.y) === 1) next = right;
+
+         let x = next.x * cellWidth;
+         let y = next.y * cellHeight;
+         ctx.lineTo(x + cellWidth / 2, y + cellHeight / 2);
+
+         last = current;
+         current = next;
+      };
+      ctx.strokeStyle = "yellow";
+      ctx.lineWidth = 0.25;
+      ctx.stroke();
+
+      // ctx.beginPath();
+      // this.grid.forEach((cell, index) => {
+      //    if (cell !== 1) return;
+      //    let x = (index % this.height) * cellWidth;
+      //    let y = Math.floor(index / this.height) * cellHeight;
+      //    quad(x, y);
+      // });
+      // ctx.fillStyle = "yellow";
+      // ctx.fill();
    }
 }
 
@@ -412,6 +373,8 @@ class Game {
    }
 
    draw() {
+      let ctx = this.ctx;
+
       // Update the viewport
       let desiredX = this.hero.location.x - (this.viewport.width / 2);
       let desiredY = this.hero.location.y - (this.viewport.height / 2);
@@ -420,22 +383,33 @@ class Game {
       this.viewport = new Rect(new Point(actualX, actualY), this.viewport.width, this.viewport.height);
 
       // Clear the screen
-      this.ctx.fillStyle = "white";
-      this.ctx.fillRect(this.viewport.topLeft.x, this.viewport.topLeft.y, this.viewport.width, this.viewport.height);
-
+      ctx.fillStyle = config.background;
+      ctx.fillRect(this.viewport.topLeft.x, this.viewport.topLeft.y, this.viewport.width, this.viewport.height);
 
       let horizontalScale = this.canvasSize.width / this.viewport.width;
       let verticalScale = this.canvasSize.height / this.viewport.height;
 
-      this.ctx.setTransform(1, 0, 0, 1, 0, 0);
-      this.ctx.scale(horizontalScale, verticalScale);
-      this.ctx.translate(-actualX, -actualY);
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.scale(horizontalScale, verticalScale);
+      ctx.translate(-actualX, -actualY);
 
       // Render everything
-      this.maze.draw(this.ctx, this);
-      this.hero.draw(this.ctx);
-      this.monsters.forEach(m => m.draw(this.ctx));
-      this.bullets.forEach(b => b.draw(this.ctx));
+      this.maze.drawWalls(ctx, this);
+      this.hero.draw(ctx);
+      this.monsters.forEach(m => m.draw(ctx));
+
+      // Apply the flashlight effect
+      let flashLight = ctx.createRadialGradient(this.hero.location.x, this.hero.location.y, 0, this.hero.location.x, this.hero.location.y, 30);
+      flashLight.addColorStop(0, "rgba(0, 0, 0, 1)");
+      flashLight.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.globalCompositeOperation = "destination-in";
+      ctx.fillStyle = flashLight;
+      ctx.fillRect(this.hero.location.x - 30, this.hero.location.y - 30, 60, 60);
+      ctx.globalCompositeOperation = "source-over";
+
+      // Draw the path
+      this.maze.drawPath(ctx, this);
+      this.bullets.forEach(b => b.draw(ctx));
    }
 }
 
