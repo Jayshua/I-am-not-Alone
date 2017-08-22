@@ -15,12 +15,13 @@ Point.draw = point => {
 let Segment = (begin, end) => ({begin, end, offset: Point.sub(end, begin)});
 
 Segment.intersection = (left, right) => {
+   let offsetCross = Point.cross(left.offset, right.offset);
+   
    // offsetCross == 0 when the two segments are parallel
    // Technically, when they are also colinear there is still the possibility
    // of them intersecting at a line segment, but that is unlikely to occur in
    // practice and treating such segments as not intersecting is fine for
    // the lighting calculations here.
-   let offsetCross = Point.cross(left.offset, right.offset);
    if (offsetCross == 0) return false;
    
    let beginDifference = Point.sub(right.begin, left.begin);
@@ -63,7 +64,7 @@ Array.prototype.flatMap = function(lambda) {
 };
 
 // ForEach doesn't return the original array, which means it can't be used in
-// map/reduce/etc. chains. This function is forEach, but it returns the original
+// map/reduce/etc. chains. The function is forEach, but it returns the original
 // array, allowing it to be chained.
 Array.prototype.forAll = function(lambda) {
   Array.prototype.forEach.apply(this, arguments);
@@ -71,12 +72,10 @@ Array.prototype.forAll = function(lambda) {
 };
 
 
-// Takes a shape, a list of edges for that shape (they MUST be accurate) and the location
-// of the light source, and returns a polygon of the light cast
-let generateShadow = (shape, edges, light) => shape
-  // atan2 is always relative to the origin. Move everything such that the light is at the center
-  .map(point => Point.sub(point, light))
-  // Compute the angle of the shape's point relative to the light
+let generateShadow = (shape, edges, hero) => shape
+  // atan2 is always relative to the origin. Move everything such that the hero is at the center
+  .map(point => Point.sub(point, hero))
+  // Compute the angle of the shape's point relative to the hero
   .map(point => Math.atan2(point.y, point.x))
   // Sort the angles so that drawing the final shadow can be done simply by connecting points
   .sort((a, b) => a - b)
@@ -86,9 +85,9 @@ let generateShadow = (shape, edges, light) => shape
   // Convert each angle back into a point.
   .map(angle => Point(Math.cos(angle) * 200, Math.sin(angle) * 200))
   // Undo the translation to the origin back in step one
-  .map(point => Point.add(light, point))
-  // Convert each point into a line segment starting at the light
-  .map(point => Segment(light, point))
+  .map(point => Point.add(hero, point))
+  // Convert each point into a line segment starting at the hero
+  .map(point => Segment(hero, point))
   // Draw the line segments for debugging purposes
   // .forAll(Segment.draw)
   // Find the closest intersecting point out of all of the edges in the scene
@@ -135,41 +134,42 @@ let mouse = (function() {
 
 
 let shape = [
-Point(-1.0,  1.0),
-Point(-0.6,  1.0),
-Point(-0.6,  0.0),
-Point(-0.4,  0.0),
-Point(-0.4,  1.0),
-Point( 0.4,  1.0),
-Point( 0.4,  0.8),
-Point( 0.8,  0.8),
-Point( 0.8,  1.0),
-Point( 1.0,  1.0),
-Point( 1.0, -1.0),
-Point( 0.2, -1.0),
-Point( 0.2, -0.5),
-Point( 0.6, -0.5),
-Point( 0.6,  0.0),
-Point( 0.2,  0.0),
-Point( 0.2,  0.8),
-Point( 0.0,  0.8),
-Point( 0.0, -1.0),
-Point(-1.0, -1.0)
+  Point(-1.0,  1.0),
+  Point(-0.6,  1.0),
+  Point(-0.6,  0.0),
+  Point(-0.4,  0.0),
+  Point(-0.4,  1.0),
+  Point( 0.4,  1.0),
+  Point( 0.4,  0.8),
+  Point( 0.8,  0.8),
+  Point( 0.8,  1.0),
+  Point( 1.0,  1.0),
+  Point( 1.0, -1.0),
+  Point( 0.2, -1.0),
+  Point( 0.2, -0.5),
+  Point( 0.6, -0.5),
+  Point( 0.6,  0.0),
+  Point( 0.2,  0.0),
+  Point( 0.2,  0.8),
+  Point( 0.0,  0.8),
+  Point( 0.0, -1.0),
+  Point(-1.0, -1.0)
 ];
 
-
-
+// Generate a list of edges for the shape
 let edges = shape.map((point, index, points) =>
   Segment(point, points[(index + 1) % points.length]));
 
 
-let render = (time) => {
+let render = () => {
   // Clear the screen
   ctx.globalCompositeOperation = "source-over";
   ctx.fillStyle = "black";
   ctx.fillRect(-1, -1, 2, 2);
 
-  // Draw the shadow
+  // Draw the "fringes"  lighter shadows on the edges of the view
+  // This is implemented by simply running the lighting calculation
+  // multiple times for a circle of lights around the main light
   let count = 10;
   let stepSize = (Math.PI * 2) / count;
   let gradient = ctx.createRadialGradient(mouse.x, mouse.y, 0, mouse.x, mouse.y, 1.2);
@@ -177,17 +177,17 @@ let render = (time) => {
   gradient.addColorStop(1, "rgba(0, 0, 0, 0)");
   ctx.fillStyle = gradient;
   for (let i = 0; i < count; i++) {
-    let x = Math.cos(stepSize * i + time / 15) * 0.08 + mouse.x;
-    let y = Math.sin(stepSize * i + time / 15) * 0.08 + mouse.y;
+    let x = Math.cos(stepSize * i) * 0.08 + mouse.x;
+    let y = Math.sin(stepSize * i) * 0.08 + mouse.y;
     ctx.beginPath();
     generateShadow(shape, edges, Point(x,y)).forEach(point => ctx.lineTo(point.x, point.y));
     ctx.fill();
   }
   
+  // Render the main shadow
   ctx.beginPath();
   generateShadow(shape, edges, mouse).forEach(point => ctx.lineTo(point.x, point.y));
   ctx.fill();
-  setTimeout(render.bind(null, time + 1), 100);
+  requestAnimationFrame(render);
 };
-
-render(0);
+render();
